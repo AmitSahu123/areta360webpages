@@ -3,19 +3,7 @@ const nodemailer = require('nodemailer');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
-
-// Try loading .env file with explicit path
-const dotenv = require('dotenv');
-const envPath = path.join(__dirname, '.env');
-
-if (fs.existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-} else {
-  console.warn(`.env file not found at ${envPath}. Attempting to load environment variables without it, or from default location.`);
-  dotenv.config(); // Attempt to load from environment or default .env location if any
-}
-
+require('dotenv').config();
 const app = express();
 
 // Configure multer for file upload
@@ -50,12 +38,13 @@ app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
 // Create uploads directory if it doesn't exist
+const fs = require('fs');
 if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
 }
 
-// Create a transporter
-const transporter = nodemailer.createTransport({
+// Create a transporter for admin (default)
+const adminTransporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
@@ -63,12 +52,29 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+// Create a transporter for HR
+const hrTransporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.HR_EMAIL_USER,
+    pass: process.env.HR_EMAIL_PASS
+  }
+});
+
 // Verify transporter configuration
-transporter.verify(function(error, success) {
+adminTransporter.verify(function(error, success) {
   if (error) {
-    console.log('Transporter error:', error);
+    console.log('Admin transporter error:', error);
   } else {
-    console.log('Server is ready to send emails');
+    console.log('Admin transporter is ready to send emails');
+  }
+});
+
+hrTransporter.verify(function(error, success) {
+  if (error) {
+    console.log('HR transporter error:', error);
+  } else {
+    console.log('HR transporter is ready to send emails');
   }
 });
 
@@ -81,8 +87,8 @@ app.post('/api/career-form', upload.single('resume'), async (req, res) => {
   const resumePath = req.file ? req.file.path : null;
 
   const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: process.env.EMAIL_USER,
+    from: 'hr@areta360.com',
+    to: 'hr@areta360.com',
     subject: 'New Career Application',
     html: `
       <h2>New Career Application</h2>
@@ -96,8 +102,8 @@ app.post('/api/career-form', upload.single('resume'), async (req, res) => {
   };
 
   try {
-    console.log('Attempting to send email...');
-    const info = await transporter.sendMail(mailOptions);
+    console.log('Attempting to send email via HR transporter...');
+    const info = await hrTransporter.sendMail(mailOptions);
     console.log('Email sent successfully:', info.response);
     
     // Clean up uploaded file after sending email
@@ -146,7 +152,7 @@ app.post('/api/blog-form', async (req, res) => {
 
   try {
     console.log('Attempting to send email...');
-    const info = await transporter.sendMail(mailOptions);
+    const info = await adminTransporter.sendMail(mailOptions);
     console.log('Email sent successfully:', info.response);
     res.status(200).json({ message: 'Message sent successfully' });
   } catch (error) {
